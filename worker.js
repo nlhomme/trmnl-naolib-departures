@@ -42,8 +42,16 @@ export default {
       );
     }
 
+    const parseTemps = (t) => {
+      if (!t) return Infinity;
+      if (t.toLowerCase() === "proche") return 0;
+      const m = t.match(/(\d+)/);
+      return m ? parseInt(m[1], 10) : Infinity;
+    };
+
     const departures = (await depRes.json())
       .filter(d => d.temps && d.temps.trim() !== "")
+      .sort((a, b) => parseTemps(a.temps) - parseTemps(b.temps))
       .slice(0, 7);
 
     return new Response(
