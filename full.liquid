@@ -1,30 +1,27 @@
 <div class="layout">
-  <div class="flex pl--1 pr--1" style="flex-direction:column;width:100%;height:100%;box-sizing:border-box;overflow:hidden;">
+  <div class="flex flex--row, flex--wrap">
+    <span class="value--small">{{ merge_variables.stop.libelle }}</span>
+    <span class="label text--gray-30">{{ merge_variables.stop.distance }}</span>
 
-    <div class="mb--2 flex" style="align-items:baseline;gap:10px;flex-shrink:0;">
-      <span class="value--small" style="text-transform:uppercase;letter-spacing:0.05em;">{{ merge_variables.stop.libelle }}</span>
-      <span class="label" style="opacity:0.55;white-space:nowrap;">{{ merge_variables.stop.distance }}</span>
-    </div>
+    <div class="divider"></div>
 
-    <div class="mb--1.5" style="width:100%;height:1.5px;background:#111;flex-shrink:0;"></div>
-
-    <div class="flex" style="align-items:center;gap:8px;flex-shrink:0;">
-      <span class="value--xxsmall" style="min-width:36px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.45;">Ligne</span>
-      <span class="value--xxsmall" style="flex:1;text-transform:uppercase;letter-spacing:0.08em;opacity:0.45;">Direction</span>
-      <span class="text--right value--xxsmall" style="min-width:46px;text-transform:uppercase;letter-spacing:0.08em;opacity:0.45;">Attente</span>
+    <div class="grid">
+      <span class="value--xxsmall">Ligne</span>
+      <span class="value--xxsmall">Direction</span>
+      <span class="text--right value--xxsmall">Attente</span>
     </div>
 
     {% for dep in merge_variables.departures %}
     {% if dep.ligne.typeLigne == 1 %}{% assign badge_radius = "4px" %}{% else %}{% assign badge_radius = "11px" %}{% endif %}
     {% if dep.tempsReel == "true" %}{% assign time_opacity = "1" %}{% assign dot_style = "background:#111;" %}{% else %}{% assign time_opacity = "0.45" %}{% assign dot_style = "border:1.5px solid rgba(0,0,0,0.25);" %}{% endif %}
-    <div class="flex pl--1 pb--1" style="align-items:center;gap:8px;border-bottom:1px solid rgba(0,0,0,0.12);flex-shrink:0;">
-      <div class="text--white flex flex--center-x value-xxsmall" style="min-width:36px;height:22px;align-items:center;background:#111;flex-shrink:0;border-radius:{{ badge_radius }};">{{ dep.ligne.numLigne }}</div>
-      <div class="value--xxsmall" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">&#8594; {{ dep.terminus }}</div>
-      <div class="text--right value--xxsmall" style="min-width:46px;flex-shrink:0;opacity:{{ time_opacity }};">{{ dep.temps }}</div>
+    <div class="grid">
+      <div class="text--black  value-xxsmall">{{ dep.ligne.numLigne }}</div>
+      <div class="value--xxsmall">&#8594; {{ dep.terminus }}</div>
+      <div class="text--right value--xxsmall">{{ dep.temps }}</div>
       <div class="rounded--medium" style="width:6px;height:6px;flex-shrink:0;{{ dot_style }}"></div>
     </div>
     {% else %}
-    <div class="value--xxsmall p--12" style="opacity:0.5;">Aucun d&eacute;part disponible</div>
+    <div class="value--xxsmall p--12">Aucun d&eacute;part disponible</div>
     {% endfor %}
 
   </div>
@@ -32,5 +29,4 @@
 <div class="title_bar">
   <span class="title">Naolib - Départs à proximité</span>
   <span class="instance">{{ merge_variables.refreshed_at }}</span>
-</div>
 </div>
