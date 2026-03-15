@@ -10,7 +10,7 @@ Affiche en temps réel les prochains départs depuis l'arrêt Naolib (TAN) le pl
 
 ## Architecture
 
-```
+```text
 TRMNL interroge → Cloudflare Worker?lat=...&lng=...
                    → TAN /arrets.json (arrêts à proximité)
                    → TAN /tempsattente.json (départs)
@@ -41,7 +41,7 @@ Utilisez n'importe quel outil cartographique (ex. Google Maps → clic droit →
 L'API TAN utilise une **virgule** comme séparateur décimal (format français). Remplacez les points par des virgules :
 
 | Format standard | Format API TAN |
-|---|---|
+| --- | --- |
 | `47.21661` | `47,21661` |
 | `-1.556754` | `-1,556754` |
 
@@ -51,9 +51,11 @@ Dans le [tableau de bord TRMNL](https://usetrmnl.com), créez un nouveau plugin 
 
 - **Stratégie** : Polling
 - **URL de polling** : L'URL de votre Worker avec les coordonnées, ex. :
-  ```
+
+  ```text
   https://naolib-worker.votre-sous-domaine.workers.dev/?lat=47,21661&lng=-1,556754
   ```
+
 - **Intervalle de rafraîchissement** : 60 secondes
 
 ### 4. Coller le template
@@ -76,7 +78,7 @@ Copiez le contenu de chaque fichier du dossier `views/` dans le champ correspond
 ## Fichiers
 
 | Fichier | Description |
-|---|---|
+| --- | --- |
 | `worker.js` | Cloudflare Worker — récupère les arrêts et départs depuis l'API TAN |
 | `wrangler.toml` | Configuration de déploiement du Worker |
 | `views/full.liquid` | Template Liquid — vue plein écran |
