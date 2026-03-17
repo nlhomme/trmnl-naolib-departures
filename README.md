@@ -109,3 +109,7 @@ Merci également à Steve Karmeinsky ([@stevekennedyuk](https://github.com/steve
 Merci à Anthropic pour avoir conçu Claude Code, grâce à qui la création du Worker js fut une question de secondes.</p>
 
 Enfin, merci à Mario du support TRMNL pour ses conseils et pour avoir fixé mon code juste avant la publication du plugin.
+
+## License
+
+[MIT](LICENSE)
