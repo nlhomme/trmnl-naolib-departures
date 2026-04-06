@@ -36,6 +36,8 @@ wrangler deploy
 
 L'URL du Worker s'affichera après le déploiement (ex. `https://naolib-worker.votre-sous-domaine.workers.dev`).
 
+> ⚠️ **Important :** Vérifiez qu'aucun **Cron Trigger** n'est configuré sur le Worker. Dans le tableau de bord Cloudflare → Workers & Pages → `naolib-worker` → Settings → Triggers, supprimez tout déclencheur cron s'il y en a. Ce Worker ne répond qu'aux requêtes HTTP (polling TRMNL) et ne possède pas de fonction `scheduled()` — un cron actif provoquerait des erreurs.
+
 > Si vous ne pouvez pas héberger le Worker vous-même, envoyez un email à `adverbe_upsilon2z@icloud.com` pour obtenir une URL de polling prête à l'emploi.
 
 ### 2. Trouver vos coordonnées
