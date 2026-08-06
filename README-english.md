@@ -8,7 +8,7 @@ A preview of this plugin is available at [https://trmnl.com/recipes/256931/demo]
 
 ## How It Works
 
-1. A Cloudflare Worker (`worker.js`) acts as a proxy: it fetches nearby stops and their real-time departure times from the TAN API, then returns the combined data in TRMNL's `merge_variables` format.
+1. A Cloudflare Worker (`worker.js`) acts as a proxy: it resolves the Naolib stop nearest to your coordinates, fetches its real-time departures from the Nantes Métropole SIRI API, then returns the combined data in TRMNL's `merge_variables` format.
 2. TRMNL polls the Worker URL with your coordinates and displays the departure board using the Liquid templates in the `views/` folder.
 3. The display refreshes every minute.
 
@@ -16,8 +16,8 @@ A preview of this plugin is available at [https://trmnl.com/recipes/256931/demo]
 
 ```text
 TRMNL polls → Cloudflare Worker?lat=...&lng=...
-               → TAN /arrets.json (nearby stops)
-               → TAN /tempsattente.json (departures)
+               → nearest stop resolved from stops.js (bundled GTFS index)
+               → POST SIRI StopMonitoring (one sub-request per quay of the stop)
                → returns { merge_variables: { stop, departures, refreshed_at } }
 TRMNL renders views/*.liquid with {{ merge_variables.* }}
 ```
@@ -42,12 +42,7 @@ The Worker URL will be displayed after deployment (e.g. `https://naolib-worker.y
 
 Use any map tool (e.g. Google Maps → right-click → copy coordinates) to get the latitude and longitude of the location you want to monitor.
 
-The TAN API uses a **comma** as the decimal separator (French format). Replace dots with commas:
-
-| Standard format | TAN API format |
-| --- | --- |
-| `47.21661` | `47,21661` |
-| `-1.556754` | `-1,556754` |
+Both dot and comma decimal separators are accepted: `47.21661` works as well as `47,21661`. (The old TAN API required commas, so existing configurations keep working.)
 
 ### 3. Install the Plugin
 
@@ -83,7 +78,11 @@ Copy the contents of each file in the `views/` folder into the corresponding fie
 
 | File | Description |
 | --- | --- |
-| `worker.js` | Cloudflare Worker — fetches stops and departures from the TAN API |
+| `worker.js` | Cloudflare Worker — resolves the nearest stop and fetches departures over SIRI |
+| `stops.js` | Naolib stop index (name, coordinates, quays) generated from the GTFS feed |
+| `build-stops.mjs` | Regenerates `stops.js` from the GTFS feed published by Nantes Métropole |
+| `test.mjs` | Worker checks (`node test.mjs`) |
+| `test-fixture.xml` | Real SIRI response used by the tests |
 | `wrangler.toml` | Worker deployment configuration |
 | `views/full.liquid` | Liquid template — full screen view |
 | `views/half-horizontal.liquid` | Liquid template — horizontal half-screen view |
@@ -93,10 +92,20 @@ Copy the contents of each file in the `views/` folder into the corresponding fie
 
 ## API
 
-This plugin uses the [TAN open data API](https://open.tan.fr/ewp/). No API key is required.
+The old `open.tan.fr` API has been retired. The plugin now uses the [Nantes Métropole SIRI real-time services](https://data.nantesmetropole.fr/explore/dataset/244400404_services_temps_reel_transports_commun_naolib_nantes_metropole_siri/information/). No API key is required.
 
-- Nearby stops: `https://open.tan.fr/ewp/arrets.json/{lat}/{lng}`
-- Upcoming departures: `https://open.tan.fr/ewp/tempsattente.json/{codeLieu}`
+- Departures: `POST https://api.okina.fr/gateway/sem/realtime/anshar/services` with a `StopMonitoringRequest` XML body
+
+Two limits of anonymous (keyless) access shape the Worker:
+
+- **1 request every 30 seconds.** All quays of a stop are therefore requested in a single POST. Keep the TRMNL refresh interval well above 30s.
+- **SIRI only, no SIRI Lite** (the REST/JSON flavour needs an authenticated key), and SIRI offers no geographic search.
+
+That is why stops are bundled in `stops.js`, generated from the [Naolib GTFS feed](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/). The GTFS feed is renewed monthly, so regenerate the index when stops change:
+
+```bash
+node build-stops.mjs
+```
 
 ## Acknowledgements
 

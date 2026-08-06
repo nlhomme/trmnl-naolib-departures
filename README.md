@@ -8,7 +8,7 @@ Un aperçu de ce plugin est disponible via [https://trmnl.com/recipes/256931/dem
 
 ## Fonctionnement
 
-1. Un Cloudflare Worker (`worker.js`) sert de proxy : il récupère les arrêts à proximité et leurs horaires de départ en temps réel depuis l'API TAN, puis renvoie les données combinées au format `merge_variables` de TRMNL.
+1. Un Cloudflare Worker (`worker.js`) sert de proxy : il détermine l'arrêt Naolib le plus proche de vos coordonnées, récupère ses prochains départs en temps réel depuis l'API SIRI de Nantes Métropole, puis renvoie les données combinées au format `merge_variables` de TRMNL.
 2. TRMNL interroge l'URL du Worker avec vos coordonnées et affiche le tableau des départs via les templates Liquid du dossier `views/`.
 3. L'affichage se rafraîchit toutes les minutes.
 
@@ -16,8 +16,8 @@ Un aperçu de ce plugin est disponible via [https://trmnl.com/recipes/256931/dem
 
 ```text
 TRMNL interroge → Cloudflare Worker?lat=...&lng=...
-                   → TAN /arrets.json (arrêts à proximité)
-                   → TAN /tempsattente.json (départs)
+                   → arrêt le plus proche cherché dans stops.js (index GTFS embarqué)
+                   → POST SIRI StopMonitoring (un sous-ensemble par quai de l'arrêt)
                    → renvoie { merge_variables: { stop, departures, refreshed_at } }
 TRMNL affiche views/*.liquid avec {{ merge_variables.* }}
 ```
@@ -42,12 +42,7 @@ L'URL du Worker s'affichera après le déploiement (ex. `https://naolib-worker.v
 
 Utilisez n'importe quel outil cartographique (ex. Google Maps → clic droit → copier les coordonnées) pour obtenir la latitude et la longitude du lieu que vous souhaitez surveiller.
 
-L'API TAN utilise une **virgule** comme séparateur décimal (format français). Remplacez les points par des virgules :
-
-| Format standard | Format API TAN |
-| --- | --- |
-| `47.21661` | `47,21661` |
-| `-1.556754` | `-1,556754` |
+Le point et la virgule décimale sont tous les deux acceptés : `47.21661` comme `47,21661`. (L'ancienne API TAN imposait la virgule ; les configurations existantes continuent donc de fonctionner.)
 
 ### 3. Installer le plugin
 
@@ -83,7 +78,11 @@ Copiez le contenu de chaque fichier du dossier `views/` dans le champ correspond
 
 | Fichier | Description |
 | --- | --- |
-| `worker.js` | Cloudflare Worker — récupère les arrêts et départs depuis l'API TAN |
+| `worker.js` | Cloudflare Worker — cherche l'arrêt le plus proche et récupère les départs via SIRI |
+| `stops.js` | Index des arrêts Naolib (nom, coordonnées, quais) généré depuis le GTFS |
+| `build-stops.mjs` | Régénère `stops.js` depuis le GTFS publié par Nantes Métropole |
+| `test.mjs` | Vérifications du Worker (`node test.mjs`) |
+| `test-fixture.xml` | Réponse SIRI réelle utilisée par les tests |
 | `wrangler.toml` | Configuration de déploiement du Worker |
 | `views/full.liquid` | Template Liquid — vue plein écran |
 | `views/half-horizontal.liquid` | Template Liquid — vue demi-écran horizontal |
@@ -93,10 +92,20 @@ Copiez le contenu de chaque fichier du dossier `views/` dans le champ correspond
 
 ## API
 
-Ce plugin utilise l'[API open data TAN](https://open.tan.fr/ewp/). Aucune clé API n'est nécessaire.
+L'ancienne API `open.tan.fr` a été supprimée. Le plugin utilise désormais les [services temps réel SIRI de Nantes Métropole](https://data.nantesmetropole.fr/explore/dataset/244400404_services_temps_reel_transports_commun_naolib_nantes_metropole_siri/information/). Aucune clé API n'est nécessaire.
 
-- Arrêts à proximité : `https://open.tan.fr/ewp/arrets.json/{lat}/{lng}`
-- Prochains départs : `https://open.tan.fr/ewp/tempsattente.json/{codeLieu}`
+- Départs : `POST https://api.okina.fr/gateway/sem/realtime/anshar/services` avec un corps XML `StopMonitoringRequest`
+
+Deux limites de l'accès libre (sans clé) façonnent le Worker :
+
+- **1 requête toutes les 30 secondes.** Tous les quais d'un arrêt sont donc demandés dans un seul POST. Gardez l'intervalle de rafraîchissement TRMNL bien au-dessus de 30 s.
+- **SIRI uniquement, pas de SIRI Lite** (le JSON REST demande une clé authentifiée), et SIRI n'offre aucune recherche géographique.
+
+C'est pourquoi les arrêts sont embarqués dans `stops.js`, généré depuis le [GTFS Naolib](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/). Le GTFS étant renouvelé chaque mois, régénérez l'index quand des arrêts changent :
+
+```bash
+node build-stops.mjs
+```
 
 ## Remerciements
 
