@@ -8,16 +8,16 @@ A preview of this plugin is available at [https://trmnl.com/recipes/256931/demo]
 
 ## How It Works
 
-1. A Cloudflare Worker (`worker.js`) acts as a proxy: it fetches nearby stops and their real-time departure times from the TAN API, then returns the combined data in TRMNL's `merge_variables` format.
+1. A Cloudflare Worker (`worker.js`) acts as a proxy: it resolves the Naolib stop nearest to your coordinates, fetches its real-time departures from the Nantes Métropole SIRI API, then returns the combined data in TRMNL's `merge_variables` format.
 2. TRMNL polls the Worker URL with your coordinates and displays the departure board using the Liquid templates in the `views/` folder.
-3. The display refreshes every minute.
+3. The display refreshes at the interval configured in TRMNL (5 minutes minimum).
 
 ## Architecture
 
 ```text
 TRMNL polls → Cloudflare Worker?lat=...&lng=...
-               → TAN /arrets.json (nearby stops)
-               → TAN /tempsattente.json (departures)
+               → nearest stop resolved from stops.js (bundled GTFS index)
+               → POST SIRI StopMonitoring (one sub-request per quay of the stop)
                → returns { merge_variables: { stop, departures, refreshed_at } }
 TRMNL renders views/*.liquid with {{ merge_variables.* }}
 ```
@@ -44,12 +44,7 @@ The Worker URL will be displayed after deployment (e.g. `https://naolib-worker.y
 
 Use any map tool (e.g. Google Maps → right-click → copy coordinates) to get the latitude and longitude of the location you want to monitor.
 
-The TAN API uses a **comma** as the decimal separator (French format). Replace dots with commas:
-
-| Standard format | TAN API format |
-| --- | --- |
-| `47.21661` | `47,21661` |
-| `-1.556754` | `-1,556754` |
+Both dot and comma decimal separators are accepted: `47.21661` works as well as `47,21661`. (The old TAN API required commas, so existing configurations keep working.)
 
 ### 3. Install the Plugin
 
@@ -85,7 +80,12 @@ Copy the contents of each file in the `views/` folder into the corresponding fie
 
 | File | Description |
 | --- | --- |
-| `worker.js` | Cloudflare Worker — fetches stops and departures from the TAN API |
+| `worker.js` | Cloudflare Worker — resolves the nearest stop and fetches departures over SIRI |
+| `stops.js` | Naolib stop index (name, coordinates, quays) generated from the GTFS feed |
+| `build-stops.mjs` | Regenerates `stops.js` from the GTFS feed published by Nantes Métropole |
+| `test.mjs` | Worker checks (`node test.mjs`) |
+| `test-fixture.xml` | Real SIRI response used by the tests |
+| `.github/workflows/refresh-stops.yml` | Rebuilds and redeploys the stop index weekly |
 | `wrangler.toml` | Worker deployment configuration |
 | `views/full.liquid` | Liquid template — full screen view |
 | `views/half-horizontal.liquid` | Liquid template — horizontal half-screen view |
@@ -95,10 +95,38 @@ Copy the contents of each file in the `views/` folder into the corresponding fie
 
 ## API
 
-This plugin uses the [TAN open data API](https://open.tan.fr/ewp/). No API key is required.
+The old `open.tan.fr` API has been retired. The plugin now uses the [Nantes Métropole SIRI real-time services](https://data.nantesmetropole.fr/explore/dataset/244400404_services_temps_reel_transports_commun_naolib_nantes_metropole_siri/information/). No API key is required.
 
-- Nearby stops: `https://open.tan.fr/ewp/arrets.json/{lat}/{lng}`
-- Upcoming departures: `https://open.tan.fr/ewp/tempsattente.json/{codeLieu}`
+- Departures: `POST https://api.okina.fr/gateway/sem/realtime/anshar/services` with a `StopMonitoringRequest` XML body
+
+Two limits of anonymous (keyless) access shape the Worker:
+
+- **1 request every 30 seconds.** All quays of a stop are therefore requested in a single POST. Keep the TRMNL refresh interval well above 30s.
+- **SIRI only, no SIRI Lite** (the REST/JSON flavour needs an authenticated key), and SIRI offers no geographic search.
+
+That is why stops are bundled in `stops.js`, generated from the [Naolib GTFS feed](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/).
+
+### Keeping the index fresh
+
+The GTFS feed is reissued roughly monthly. When a quay id changes, SIRI returns an empty delivery rather than an error, so a stale index renders as "no departures" — indistinguishable from a quiet stop at 2am.
+
+`.github/workflows/refresh-stops.yml` rebuilds the index every Monday and, **only if `stops.js` actually changed**, runs the tests, commits and redeploys. A rebuild against an unchanged feed is byte-identical, so quiet weeks produce no commits and no deploys.
+
+Two guards, since the job runs unattended:
+
+- `build-stops.mjs` refuses to write an index of fewer than 900 stops (1044 today), so a truncated download cannot overwrite a good index.
+- `node test.mjs` must pass before the deploy step runs.
+
+For the job to work:
+
+- it must live on the **default branch** — GitHub only fires `schedule` triggers from there;
+- the **`CLOUDFLARE_API_TOKEN`** secret must be set under Settings → Secrets and variables → Actions (wrangler's local OAuth login does not exist in CI). Create one with the *Edit Cloudflare Workers* template.
+
+`workflow_dispatch` triggers a run manually. Locally:
+
+```bash
+node build-stops.mjs && git diff --stat stops.js
+```
 
 ## Acknowledgements
 

@@ -8,4 +8,4 @@ polling_url: https://naolib-worker.YOUR_SUBDOMAIN.workers.dev/?lat=YOUR_LAT&lng=
 polling_headers: ''
 polling_body: ''
 name: Naolib Departures
-refresh_interval: 60
+refresh_interval: 300

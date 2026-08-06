@@ -1,0 +1,60 @@
+name: Refresh stop index
+
+# stops.js is a snapshot of the Naolib GTFS feed, which is reissued roughly
+# monthly. When a quay id changes, SIRI answers with an empty delivery rather
+# than an error, so a stale index shows "no departures" instead of failing —
+# indistinguishable from a quiet stop at 2am. Weekly rebuild + redeploy keeps
+# the window of silent breakage under 7 days.
+on:
+  schedule:
+    - cron: "17 4 * * 1" # Mondays 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: refresh-stops
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Fails (leaving stops.js untouched) if the feed parses to <900 stops.
+      - name: Rebuild index from GTFS feed
+        run: node build-stops.mjs
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet -- stops.js; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Stop index unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- stops.js >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Guards the deploy: a rebuilt index that breaks nearest-stop lookup or
+      # departure parsing must not reach production.
+      - name: Test
+        if: steps.diff.outputs.changed == 'true'
+        run: node test.mjs
+
+      - name: Commit
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh Naolib stop index from GTFS feed" -- stops.js
+          git push
+
+      - name: Deploy worker
+        if: steps.diff.outputs.changed == 'true'
+        run: npx --yes wrangler@4 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
