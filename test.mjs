@@ -3,10 +3,16 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { nearestStop, parseDepartures } from "./worker.js";
 
-// Commerce, Nantes — the stop the fixture was recorded at.
+// Commerce, Nantes — the stop the fixture was recorded at. Quay ids are
+// deliberately not pinned: Naolib renumbers them across GTFS releases, and
+// the scheduled refresh must not fail on a legitimate renumbering.
 const { stop, distance } = nearestStop(47.21374, -1.55875);
 assert.strictEqual(stop[0], "Commerce");
-assert.deepStrictEqual(stop[3], [90, 91, 92, 93, 94, 95]);
+assert.ok(stop[3].length >= 4, `Commerce is a hub, got ${stop[3].length} quays`);
+assert.ok(
+  stop[3].every((q) => Number.isInteger(q) && q > 0),
+  `quay ids must be positive integers, got ${stop[3]}`
+);
 assert.ok(distance < 300, `expected <300m, got ${distance}`);
 
 // Coordinates with French decimal commas used to be required by the TAN API.
