@@ -10,7 +10,7 @@ A preview of this plugin is available at [https://trmnl.com/recipes/256931/demo]
 
 1. A Cloudflare Worker (`worker.js`) acts as a proxy: it resolves the Naolib stop nearest to your coordinates, fetches its real-time departures from the Nantes Métropole SIRI API, then returns the combined data in TRMNL's `merge_variables` format.
 2. TRMNL polls the Worker URL with your coordinates and displays the departure board using the Liquid templates in the `views/` folder.
-3. The display refreshes every minute.
+3. The display refreshes at the interval configured in TRMNL (5 minutes minimum).
 
 ## Architecture
 
@@ -83,6 +83,7 @@ Copy the contents of each file in the `views/` folder into the corresponding fie
 | `build-stops.mjs` | Regenerates `stops.js` from the GTFS feed published by Nantes Métropole |
 | `test.mjs` | Worker checks (`node test.mjs`) |
 | `test-fixture.xml` | Real SIRI response used by the tests |
+| `.github/workflows/refresh-stops.yml` | Rebuilds and redeploys the stop index weekly |
 | `wrangler.toml` | Worker deployment configuration |
 | `views/full.liquid` | Liquid template — full screen view |
 | `views/half-horizontal.liquid` | Liquid template — horizontal half-screen view |
@@ -101,10 +102,28 @@ Two limits of anonymous (keyless) access shape the Worker:
 - **1 request every 30 seconds.** All quays of a stop are therefore requested in a single POST. Keep the TRMNL refresh interval well above 30s.
 - **SIRI only, no SIRI Lite** (the REST/JSON flavour needs an authenticated key), and SIRI offers no geographic search.
 
-That is why stops are bundled in `stops.js`, generated from the [Naolib GTFS feed](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/). The GTFS feed is renewed monthly, so regenerate the index when stops change:
+That is why stops are bundled in `stops.js`, generated from the [Naolib GTFS feed](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/).
+
+### Keeping the index fresh
+
+The GTFS feed is reissued roughly monthly. When a quay id changes, SIRI returns an empty delivery rather than an error, so a stale index renders as "no departures" — indistinguishable from a quiet stop at 2am.
+
+`.github/workflows/refresh-stops.yml` rebuilds the index every Monday and, **only if `stops.js` actually changed**, runs the tests, commits and redeploys. A rebuild against an unchanged feed is byte-identical, so quiet weeks produce no commits and no deploys.
+
+Two guards, since the job runs unattended:
+
+- `build-stops.mjs` refuses to write an index of fewer than 900 stops (1044 today), so a truncated download cannot overwrite a good index.
+- `node test.mjs` must pass before the deploy step runs.
+
+For the job to work:
+
+- it must live on the **default branch** — GitHub only fires `schedule` triggers from there;
+- the **`CLOUDFLARE_API_TOKEN`** secret must be set under Settings → Secrets and variables → Actions (wrangler's local OAuth login does not exist in CI). Create one with the *Edit Cloudflare Workers* template.
+
+`workflow_dispatch` triggers a run manually. Locally:
 
 ```bash
-node build-stops.mjs
+node build-stops.mjs && git diff --stat stops.js
 ```
 
 ## Acknowledgements

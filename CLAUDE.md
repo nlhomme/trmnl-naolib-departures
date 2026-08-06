@@ -40,4 +40,12 @@ TRMNL documentation is available at: https://docs.trmnl.com/go/llms.txt
 
 ## Stop lookup
 
-SIRI has no geographic search, so `stops.js` bundles a GTFS-derived index (`[name, lat, lon, [quayIds]]`). Regenerate it with `node build-stops.mjs` when the monthly GTFS feed changes. Run `node test.mjs` after touching `worker.js`.
+SIRI has no geographic search, so `stops.js` bundles a GTFS-derived index (`[name, lat, lon, [quayIds]]`). It is **generated — never edit it by hand**; run `node build-stops.mjs`.
+
+`.github/workflows/refresh-stops.yml` rebuilds it weekly and redeploys only when it changed. Consequences for anyone editing this repo:
+
+- Do not pin specific quay ids in tests. Naolib renumbers them across GTFS releases, and a pinned id would fail the very refresh the job exists to perform. Assert shape instead.
+- `build-stops.mjs` refuses to write fewer than 900 stops (1044 today). Keep that guard; it is what stops a truncated download from silently overwriting a good index.
+- A stale or wrong quay id does **not** surface as an error — SIRI returns an empty delivery, so the plugin shows "no departures". Suspect the index before suspecting the parser.
+
+Run `node test.mjs` after touching `worker.js`, `stops.js`, or `build-stops.mjs`.

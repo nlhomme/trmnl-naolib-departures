@@ -10,7 +10,7 @@ Un aperçu de ce plugin est disponible via [https://trmnl.com/recipes/256931/dem
 
 1. Un Cloudflare Worker (`worker.js`) sert de proxy : il détermine l'arrêt Naolib le plus proche de vos coordonnées, récupère ses prochains départs en temps réel depuis l'API SIRI de Nantes Métropole, puis renvoie les données combinées au format `merge_variables` de TRMNL.
 2. TRMNL interroge l'URL du Worker avec vos coordonnées et affiche le tableau des départs via les templates Liquid du dossier `views/`.
-3. L'affichage se rafraîchit toutes les minutes.
+3. L'affichage se rafraîchit selon l'intervalle configuré dans TRMNL (5 minutes au minimum).
 
 ## Architecture
 
@@ -83,6 +83,7 @@ Copiez le contenu de chaque fichier du dossier `views/` dans le champ correspond
 | `build-stops.mjs` | Régénère `stops.js` depuis le GTFS publié par Nantes Métropole |
 | `test.mjs` | Vérifications du Worker (`node test.mjs`) |
 | `test-fixture.xml` | Réponse SIRI réelle utilisée par les tests |
+| `.github/workflows/refresh-stops.yml` | Régénère et redéploie l'index des arrêts chaque semaine |
 | `wrangler.toml` | Configuration de déploiement du Worker |
 | `views/full.liquid` | Template Liquid — vue plein écran |
 | `views/half-horizontal.liquid` | Template Liquid — vue demi-écran horizontal |
@@ -101,10 +102,28 @@ Deux limites de l'accès libre (sans clé) façonnent le Worker :
 - **1 requête toutes les 30 secondes.** Tous les quais d'un arrêt sont donc demandés dans un seul POST. Gardez l'intervalle de rafraîchissement TRMNL bien au-dessus de 30 s.
 - **SIRI uniquement, pas de SIRI Lite** (le JSON REST demande une clé authentifiée), et SIRI n'offre aucune recherche géographique.
 
-C'est pourquoi les arrêts sont embarqués dans `stops.js`, généré depuis le [GTFS Naolib](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/). Le GTFS étant renouvelé chaque mois, régénérez l'index quand des arrêts changent :
+C'est pourquoi les arrêts sont embarqués dans `stops.js`, généré depuis le [GTFS Naolib](https://data.nantesmetropole.fr/explore/dataset/244400404_transports_commun_naolib_nantes_metropole_gtfs/information/).
+
+### Maintenir l'index à jour
+
+Le GTFS est réédité environ une fois par mois. Quand l'identifiant d'un quai change, SIRI renvoie une réponse vide plutôt qu'une erreur : un index périmé affiche donc « aucun départ », ce qui est indiscernable d'un arrêt calme à 2 h du matin.
+
+`.github/workflows/refresh-stops.yml` régénère l'index chaque lundi et, **uniquement si `stops.js` a changé**, lance les tests, committe et redéploie. Une régénération sans changement amont est identique au bit près : les semaines calmes ne produisent donc ni commit ni déploiement.
+
+Deux garde-fous, le job tournant sans surveillance :
+
+- `build-stops.mjs` refuse d'écrire un index de moins de 900 arrêts (1044 aujourd'hui) : un téléchargement tronqué ne peut pas écraser un index valide.
+- `node test.mjs` doit passer avant le déploiement.
+
+Pour que le job fonctionne :
+
+- il doit se trouver sur la **branche par défaut** (GitHub n'exécute les déclencheurs `schedule` que depuis celle-ci) ;
+- le secret **`CLOUDFLARE_API_TOKEN`** doit être défini dans Settings → Secrets and variables → Actions (l'authentification OAuth locale de wrangler n'existe pas en CI). Créez-le avec le modèle *Edit Cloudflare Workers*.
+
+`workflow_dispatch` permet de déclencher un run manuellement. En local :
 
 ```bash
-node build-stops.mjs
+node build-stops.mjs && git diff --stat stops.js
 ```
 
 ## Remerciements
