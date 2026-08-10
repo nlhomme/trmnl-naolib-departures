@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       # Fails (leaving stops.js untouched) if the feed parses to <900 stops.
       - name: Rebuild index from GTFS feed
